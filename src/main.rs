@@ -1,3 +1,16 @@
+#![warn(
+    clippy::complexity,
+    clippy::correctness,
+    clippy::perf,
+    clippy::nursery,
+    clippy::suspicious,
+    clippy::style,
+)]
+#![allow(
+    clippy::semicolon_inside_block,
+    clippy::just_underscores_and_digits,
+)]
+
 use serde_json::*;
 use serde::*;
 use clap::Parser;
@@ -95,7 +108,8 @@ fn main() {
     let json = std::fs::read("_tmp_geradoc.json").unwrap();
     let mut root = from_slice::<Root>(&json[..]).unwrap();
 
-    root.modules = root.modules.into_iter().filter(|(n, _)| !Regex::new(&args.modules_filter).expect("Invalid regex passed in").is_match(n)).collect();
+    let filter_regex = Regex::new(&args.modules_filter).expect("Invalid regex passed in");
+    root.modules.retain(|n, _| !filter_regex.is_match(n));
 
     let _ = remove_dir_all("docs");
 
@@ -111,7 +125,7 @@ fn main() {
 
 impl Module {
     pub fn write(&self, name: &String, this_name: &String, types: &Vec<Type>) {
-        let path = format!("docs/{}.html", name.replace(".", "/"));
+        let path = format!("docs/{}.html", name.replace('.', "/"));
         let path = std::path::Path::new(&path);
         create_dir_all(path.parent().unwrap()).unwrap();
         let mut file = File::create(path).unwrap();
@@ -179,7 +193,7 @@ fn format_type(typ_: usize, types: &Vec<Type>) -> String {
 
     let typ = &types[typ_];
     if typ.any {
-        types_result.push(format!("any"));
+        types_result.push("any".to_string());
     } else {
         for i in typ.types.as_ref().unwrap().iter() {
             match i.typ_.as_str() {
@@ -198,7 +212,7 @@ fn format_type(typ_: usize, types: &Vec<Type>) -> String {
                 "closure" => {
                     let mut params = Vec::with_capacity(i.parameter_types.as_ref().unwrap().len());
                     for t in i.parameter_types.as_ref().unwrap().iter() {
-                        params.push(format!("{}", format_type(*t, types)));
+                        params.push(format_type(*t, types));
                     }
                     types_result.push(format!("(|{}| -> {})", params.join(", "), format_type(i.return_types.unwrap(), types)));
                 },
@@ -210,7 +224,7 @@ fn format_type(typ_: usize, types: &Vec<Type>) -> String {
                     types_result.push(format!("variant({})", varis.join(", ")));
                 },
                 "array" => types_result.push(format!("{}[]", format_type(i.element_types.unwrap(), types))),
-                _ => types_result.push(format!("{}", i.typ_)),
+                _ => types_result.push(i.typ_.to_string()),
             }
         }
     }
