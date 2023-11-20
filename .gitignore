@@ -2,3 +2,5 @@
 /Cargo.lock
 *.json
 *.gera
+/docs
+/clap
