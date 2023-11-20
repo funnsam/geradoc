@@ -11,6 +11,8 @@
     clippy::just_underscores_and_digits,
 )]
 
+const MAX_RECURSION: usize = 10;
+
 use serde_json::*;
 use serde::*;
 use clap::Parser;
@@ -40,6 +42,7 @@ struct Procedure {
     pub external: bool,
     pub parameters: Vec<Parameter>,
     pub return_types: usize,
+    pub public: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +56,7 @@ struct Parameter {
 struct Constant {
     pub name: String,
     pub types: usize,
+    pub public: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +89,7 @@ struct InnerType {
 
 #[derive(Debug, Parser)]
 struct Args {
-    pub gera_file_path: String,
+    pub gera_file_path: Vec<String>,
 
     #[clap(long, default_value = r"core")]
     pub modules_filter: String,
@@ -95,7 +99,7 @@ fn main() {
     let args = Args::parse();
 
     let out = Command::new("gerac")
-        .arg(args.gera_file_path)
+        .args(args.gera_file_path)
         .args(["-o", "_tmp_geradoc.json", "-t", "symbols"])
         .output()
         .unwrap();
@@ -113,7 +117,7 @@ fn main() {
 
     let _ = remove_dir_all("docs");
 
-    for (n, m) in root.modules.iter() {
+    for (n, m) in root.modules.iter_mut() {
         m.write(n, n, &root.types);
     }
 
@@ -124,8 +128,8 @@ fn main() {
 }
 
 impl Module {
-    pub fn write(&self, name: &String, this_name: &String, types: &Vec<Type>) {
-        let path = format!("docs/{}.html", name.replace('.', "/"));
+    pub fn write(&mut self, name: &String, this_name: &String, types: &Vec<Type>) {
+        let path = format!("docs/{}.html", name.replace("::", "/"));
         let path = std::path::Path::new(&path);
         create_dir_all(path.parent().unwrap()).unwrap();
         let mut file = File::create(path).unwrap();
@@ -137,7 +141,7 @@ impl Module {
             <link rel='stylesheet' href='{}style.css'>
             </head><body>",
 
-            "../".repeat(name.chars().filter(|a| *a == '.').count())
+            "../".repeat(name.matches("::").count())
         ).unwrap();
 
         writeln!(file, "<h1>Module <code>{name}</code></h1>").unwrap();
@@ -146,8 +150,8 @@ impl Module {
             writeln!(file, "<h2>Modules</h2><ul>").unwrap();
         }
 
-        for (n, m) in self.modules.iter() {
-            m.write(&format!("{name}.{n}"), n, types);
+        for (n, m) in self.modules.iter_mut() {
+            m.write(&format!("{name}::{n}"), n, types);
             writeln!(file, "    <li><a href='./{this_name}/{n}.html'><code>{n}</code></a>").unwrap();
         }
 
@@ -155,19 +159,20 @@ impl Module {
             writeln!(file, "</ul>").unwrap();
         }
 
+        self.constants.retain(|_, a| a.public);
         if !self.constants.is_empty() {
             writeln!(file, "<h2>Constants</h2><ul>").unwrap();
         }
 
         for (_, c) in self.constants.iter() {
-            writeln!(file, "    <li><code>var {}: {}</code></li>", c.name, format_type(c.types, types)).unwrap();
+            writeln!(file, "    <li><code>pub var {}: {}</code></li>", c.name, format_type(c.types, types, 0)).unwrap();
         }
 
         if !self.constants.is_empty() {
             writeln!(file, "</ul>").unwrap();
         }
 
-
+        self.procedures.retain(|_, a| a.public);
         if !self.procedures.is_empty() {
             writeln!(file, "<h2>Procedures</h2><ul>").unwrap();
         }
@@ -175,9 +180,9 @@ impl Module {
         for (_, p) in self.procedures.iter() {
             let mut args = Vec::with_capacity(p.parameters.len());
             for p in p.parameters.iter() {
-                args.push(format!("{}: {}", p.name, format_type(p.typ_, types)));
+                args.push(format!("{}: {}", p.name, format_type(p.typ_, types, 0)));
             }
-            writeln!(file, "    <li><code>{}proc {}({}) -> {}</code></li>", if p.external { "extern " } else { "" }, p.name, args.join(", "), format_type(p.return_types, types)).unwrap();
+            writeln!(file, "    <li><code>pub {}proc {}({}) -> {}</code></li>", if p.external { "extern " } else { "" }, p.name, args.join(", "), format_type(p.return_types, types, 0)).unwrap();
         }
 
         if !self.procedures.is_empty() {
@@ -188,7 +193,11 @@ impl Module {
     }
 }
 
-fn format_type(typ_: usize, types: &Vec<Type>) -> String {
+fn format_type(typ_: usize, types: &Vec<Type>, iter: usize) -> String {
+    if iter == MAX_RECURSION {
+        return "?".to_string();
+    }
+
     let mut types_result = Vec::new();
 
     let typ = &types[typ_];
@@ -200,7 +209,7 @@ fn format_type(typ_: usize, types: &Vec<Type>) -> String {
                 "object" => {
                     let mut fields = Vec::with_capacity(i.member_types.as_ref().unwrap().len());
                     for (n, t) in i.member_types.as_ref().unwrap().iter() {
-                        fields.push(format!("{n}: {}", format_type(*t, types)));
+                        fields.push(format!("{n}: {}", format_type(*t, types, iter+1)));
                     }
                     types_result.push(format!("{{ {}{}}}", fields.join(", "), match (fields.is_empty(), i.fixed.unwrap()) {
                         (true, true) => "",
@@ -212,18 +221,18 @@ fn format_type(typ_: usize, types: &Vec<Type>) -> String {
                 "closure" => {
                     let mut params = Vec::with_capacity(i.parameter_types.as_ref().unwrap().len());
                     for t in i.parameter_types.as_ref().unwrap().iter() {
-                        params.push(format_type(*t, types));
+                        params.push(format_type(*t, types, iter+1));
                     }
-                    types_result.push(format!("(|{}| -> {})", params.join(", "), format_type(i.return_types.unwrap(), types)));
+                    types_result.push(format!("(|{}| -> {})", params.join(", "), format_type(i.return_types.unwrap(), types, iter+1)));
                 },
                 "variants" => {
                     let mut varis = Vec::with_capacity(i.variant_types.as_ref().unwrap().len());
                     for (n, t) in i.variant_types.as_ref().unwrap().iter() {
-                        varis.push(format!("{n}({})", format_type(*t, types)));
+                        varis.push(format!("{n}({})", format_type(*t, types, iter+1)));
                     }
                     types_result.push(format!("variant({})", varis.join(", ")));
                 },
-                "array" => types_result.push(format!("{}[]", format_type(i.element_types.unwrap(), types))),
+                "array" => types_result.push(format!("{}[]", format_type(i.element_types.unwrap(), types, iter+1))),
                 _ => types_result.push(i.typ_.to_string()),
             }
         }

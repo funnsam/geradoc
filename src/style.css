@@ -48,7 +48,4 @@ code {
 	border-radius: 5px;
 
 	background-color: var(--code-background) !important;
-
-	position: relative;
-	z-index: -1;
 }
