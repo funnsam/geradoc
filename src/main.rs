@@ -134,62 +134,57 @@ impl Module {
         create_dir_all(path.parent().unwrap()).unwrap();
         let mut file = File::create(path).unwrap();
 
-        writeln!(file,
-            "<!DOCTYPE HTML><html><head>
-            <title>GeraDoc — {name}</title>
-            <meta charset='UTF-8'>
-            <link rel='stylesheet' href='{}style.css'>
-            </head><body>",
-
+        write!(file,
+            "<!DOCTYPE HTML><html><head><title>GeraDoc — {name}</title><meta charset='UTF-8'><link rel='stylesheet' href='{}style.css'></head><body>",
             "../".repeat(name.matches("::").count())
         ).unwrap();
 
-        writeln!(file, "<h1>Module <code>{name}</code></h1>").unwrap();
+        write!(file, "<h1>Module <code><a class='intensify'>{name}</a></code></h1>").unwrap();
 
         if !self.modules.is_empty() {
-            writeln!(file, "<h2>Modules</h2><ul>").unwrap();
+            write!(file, "<h2>Modules</h2><ul>").unwrap();
         }
 
         for (n, m) in self.modules.iter_mut() {
             m.write(&format!("{name}::{n}"), n, types);
-            writeln!(file, "    <li><a href='./{this_name}/{n}.html'><code>{n}</code></a>").unwrap();
+            write!(file, "<li><code><a href='./{this_name}/{n}.html' class='intensify'>{n}</a></code>").unwrap();
         }
 
         if !self.modules.is_empty() {
-            writeln!(file, "</ul>").unwrap();
+            write!(file, "</ul>").unwrap();
         }
 
         self.constants.retain(|_, a| a.public);
         if !self.constants.is_empty() {
-            writeln!(file, "<h2>Constants</h2><ul>").unwrap();
+            write!(file, "<h2>Constants</h2><ul>").unwrap();
         }
 
         for (_, c) in self.constants.iter() {
-            writeln!(file, "    <li><code>pub var {}: {}</code></li>", c.name, format_type(c.types, types, 0)).unwrap();
+            write!(file, "<li><code><a class='keyword'>pub var</a> <a class='ident'>{}</a>: {}</code></li>", c.name, format_type(c.types, types, 0)).unwrap();
         }
 
         if !self.constants.is_empty() {
-            writeln!(file, "</ul>").unwrap();
+            write!(file, "</ul>").unwrap();
         }
 
         self.procedures.retain(|_, a| a.public);
         if !self.procedures.is_empty() {
-            writeln!(file, "<h2>Procedures</h2><ul>").unwrap();
+            write!(file, "<h2>Procedures</h2><ul>").unwrap();
         }
 
         for (_, p) in self.procedures.iter() {
             let mut args = Vec::with_capacity(p.parameters.len());
             for p in p.parameters.iter() {
-                args.push(format!("{}: {}", p.name, format_type(p.typ_, types, 0)));
+                args.push(format!("<a class='parameters'>{}</a>: {}", p.name, format_type(p.typ_, types, 0)));
             }
-            writeln!(file, "    <li><code>pub {}proc {}({}) -> {}</code></li>", if p.external { "extern " } else { "" }, p.name, args.join(", "), format_type(p.return_types, types, 0)).unwrap();
+            write!(file, "<li><code><a class='keyword'>pub {}proc</a> <a class='ident'>{}</a>({}) <a class='intensify'>-></a> {}</code></li>", if p.external { "extern " } else { "" }, p.name, args.join(", "), format_type(p.return_types, types, 0)).unwrap();
         }
 
         if !self.procedures.is_empty() {
-            writeln!(file, "</ul>").unwrap();
+            write!(file, "</ul>").unwrap();
         }
 
-        writeln!(file, "</body></html>").unwrap();
+        write!(file, "</body></html>").unwrap();
     }
 }
 
@@ -202,14 +197,14 @@ fn format_type(typ_: usize, types: &Vec<Type>, iter: usize) -> String {
 
     let typ = &types[typ_];
     if typ.any {
-        types_result.push("any".to_string());
+        types_result.push("<a class='type'>any</a>".to_string());
     } else {
         for i in typ.types.as_ref().unwrap().iter() {
             match i.typ_.as_str() {
                 "object" => {
                     let mut fields = Vec::with_capacity(i.member_types.as_ref().unwrap().len());
                     for (n, t) in i.member_types.as_ref().unwrap().iter() {
-                        fields.push(format!("{n}: {}", format_type(*t, types, iter+1)));
+                        fields.push(format!("<a class='ident'>{n}</a> = {}", format_type(*t, types, iter+1)));
                     }
                     types_result.push(format!("{{ {}{}}}", fields.join(", "), match (fields.is_empty(), i.fixed.unwrap()) {
                         (true, true) => "",
@@ -223,17 +218,17 @@ fn format_type(typ_: usize, types: &Vec<Type>, iter: usize) -> String {
                     for t in i.parameter_types.as_ref().unwrap().iter() {
                         params.push(format_type(*t, types, iter+1));
                     }
-                    types_result.push(format!("(|{}| -> {})", params.join(", "), format_type(i.return_types.unwrap(), types, iter+1)));
+                    types_result.push(format!("(<a class='intensify'>(</a>{}<a class='intensify'>) -></a> {})", params.join(", "), format_type(i.return_types.unwrap(), types, iter+1)));
                 },
                 "variants" => {
                     let mut varis = Vec::with_capacity(i.variant_types.as_ref().unwrap().len());
                     for (n, t) in i.variant_types.as_ref().unwrap().iter() {
-                        varis.push(format!("{n}({})", format_type(*t, types, iter+1)));
+                        varis.push(format!("<a class='variants'>#{n}</a> {}", format_type(*t, types, iter+1)));
                     }
-                    types_result.push(format!("variant({})", varis.join(", ")));
+                    types_result.push(format!("({})", varis.join(" | ")));
                 },
                 "array" => types_result.push(format!("{}[]", format_type(i.element_types.unwrap(), types, iter+1))),
-                _ => types_result.push(i.typ_.to_string()),
+                _ => types_result.push(format!("<a class='type'>{}</a>", i.typ_)),
             }
         }
     }
@@ -247,32 +242,28 @@ fn write_index(mods: &BTreeMap<String, Module>) {
     create_dir_all(path.parent().unwrap()).unwrap();
     let mut file = File::create(path).unwrap();
 
-    writeln!(file,
-        "<!DOCTYPE HTML><html><head>
-        <title>GeraDoc — Index</title>
-        <meta charset='UTF-8'>
-        <link rel='stylesheet' href='style.css'>
-        </head><body>",
+    write!(file,
+           "<!DOCTYPE HTML><html><head><title>GeraDoc — Index</title><meta charset='UTF-8'><link rel='stylesheet' href='style.css'></head><body>",
     ).unwrap();
 
-    writeln!(file, "<h1>Document index</h1>").unwrap();
+    write!(file, "<h1>Document index</h1>").unwrap();
 
     if !mods.is_empty() {
-        writeln!(file, "<h2>Modules</h2><ul>").unwrap();
+        write!(file, "<h2>Modules</h2><ul>").unwrap();
     }
 
     for (n, _) in mods.iter() {
-        writeln!(file, "    <li><a href='./{n}.html'><code>{n}</code></a>").unwrap();
+        write!(file, "<li><code><a href='./{n}.html' class='intensify'>{n}</a></code>").unwrap();
     }
 
     if !mods.is_empty() {
-        writeln!(file, "</ul>").unwrap();
+        write!(file, "</ul>").unwrap();
     }
 
-    writeln!(file, "</body></html>").unwrap();
+    write!(file, "</body></html>").unwrap();
 }
 
 fn write_css() {
-    const CSS_FILE: &[u8] = include_bytes!("style.css");
+    const CSS_FILE: &[u8] = include_bytes!("style.css.min");
     write("docs/style.css", CSS_FILE).unwrap();
 }

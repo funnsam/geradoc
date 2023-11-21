@@ -3,3 +3,4 @@
 *.json
 *.gera
 /docs
+*.min

@@ -11,6 +11,23 @@
 	--background: #282c34;
 	--code-background: #32363e;
 	--foreground: #ffffff;
+
+	--color-0 : #1e2127;
+	--color-1 : #e06c75;
+	--color-2 : #98c379;
+	--color-3 : #d19a66;
+	--color-4 : #61afef;
+	--color-5 : #c678dd;
+	--color-6 : #56b6c2;
+	--color-7 : #abb2bf;
+	--color-8 : #5c6370;
+	--color-9 : #e06c75;
+	--color-10: #98c379;
+	--color-11: #d19a66;
+	--color-12: #61afef;
+	--color-13: #c678dd;
+	--color-14: #56b6c2;
+	--color-15: #ffffff;
 }
 
 html {
@@ -48,4 +65,12 @@ code {
 	border-radius: 5px;
 
 	background-color: var(--code-background) !important;
+	color: var(--color-7);
 }
+
+.keyword	{ color: var(--color-13); }
+.ident		{ color: var(--color-11); }
+.type		{ color: var(--color-12); }
+.variants	{ color: var(--color-14); }
+.parameters	{ color: var(--color-15); }
+.intensify	{ color: var(--color-15); }
