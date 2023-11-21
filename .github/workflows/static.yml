@@ -1,0 +1,55 @@
+name: Deploy GeraDoc of std and core to Pages
+
+on:
+  push:
+    branches: ["master"]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Single deploy job since we're just deploying
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gerac
+        uses: actions/checkout@v3
+        with:
+          repository: typesafeschwalbe/gerac
+          path: gerac
+      - name: Install gerac
+        run: |
+          cd gerac
+          cargo install --path=. -j8
+          cd ..
+      - name: Checkout geradoc
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          path: geradoc
+      - name: Install uglifycss
+        run: npm install uglifycss -g
+      - name: Build document
+        run: |
+          cd geradoc
+          cargo r -r -j8 -- ../gerac/stdlib-core/* --modules-filter " "
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: 'geradoc/docs/'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
