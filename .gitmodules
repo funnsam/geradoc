@@ -1,3 +1,4 @@
 [submodule "clap"]
 	path = clap
 	url = git@github.com:funnsam/clap
+	branch = gera-like
